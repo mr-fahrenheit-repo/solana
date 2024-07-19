@@ -1,0 +1,56 @@
+ const { Connection, PublicKey, clusterApiUrl, Keypair, Transaction } = require('@solana/web3.js');
+const { getOrCreateAssociatedTokenAccount, transfer, createTransferInstruction } = require('@solana/spl-token');
+
+const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
+
+const senderSecretKey = Uint8Array.from([/* your sender secret key array */]);
+const receiverSecretKey = Uint8Array.from([/* your receiver secret key array */]);
+
+const senderWallet = Keypair.fromSecretKey(senderSecretKey);
+const receiverWallet = Keypair.fromSecretKey(receiverSecretKey);
+
+const USDC_MINT_ADDRESS = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
+
+async function transferUSDC(fromWallet, toWallet, amount) {
+    const fromTokenAccount = await getOrCreateAssociatedTokenAccount(
+        connection,
+        fromWallet,
+        USDC_MINT_ADDRESS,
+        fromWallet.publicKey
+    );
+
+    const toTokenAccount = await getOrCreateAssociatedTokenAccount(
+        connection,
+        toWallet,
+        USDC_MINT_ADDRESS,
+        toWallet.publicKey
+    );
+
+    const transferInstruction = createTransferInstruction(
+        fromTokenAccount.address,
+        toTokenAccount.address,
+        fromWallet.publicKey,
+        amount * 10 ** 6
+    );
+
+    const transaction = new Transaction().add(transferInstruction);
+    const signature = await connection.sendTransaction(transaction, [fromWallet]);
+
+    await connection.confirmTransaction(signature);
+    console.log('Transfer successful:', signature);
+}
+
+async function main() {
+    const amount = 10; // Amount of USDC to transfer
+
+    // First transfer: Wallet A to Wallet B
+    await transferUSDC(senderWallet, receiverWallet, amount);
+
+    // Wait for a specified time (e.g., 1 hour)
+    await new Promise(resolve => setTimeout(resolve, 3600000)); // 1 hour in milliseconds
+
+    // Second transfer: Wallet B to Wallet A
+    await transferUSDC(receiverWallet, senderWallet, amount);
+}
+
+main();
