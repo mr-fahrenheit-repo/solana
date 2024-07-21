@@ -11,7 +11,9 @@
   "dependencies": {
     "@solana/spl-token": "^0.4.8",
     "@solana/web3.js": "^1.95.0",
+    "axios": "^1.7.2",
     "bs58": "^6.0.0",
+    "cheerio": "^1.0.0-rc.12",
     "dotenv": "^16.4.5"
   }
 }

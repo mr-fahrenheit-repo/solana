@@ -1,56 +1,90 @@
- const { Connection, PublicKey, clusterApiUrl, Keypair, Transaction } = require('@solana/web3.js');
-const { getOrCreateAssociatedTokenAccount, transfer, createTransferInstruction } = require('@solana/spl-token');
+const web3 = require('@solana/web3.js');
+const spltoken = require('@solana/spl-token');
+const bs58 = require('bs58');
+const dotenv = require('dotenv');
 
-const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
+dotenv.config();
 
-const senderSecretKey = Uint8Array.from([/* your sender secret key array */]);
-const receiverSecretKey = Uint8Array.from([/* your receiver secret key array */]);
+const connection = new web3.Connection(web3.clusterApiUrl('mainnet-beta'), 'confirmed');
 
-const senderWallet = Keypair.fromSecretKey(senderSecretKey);
-const receiverWallet = Keypair.fromSecretKey(receiverSecretKey);
+const privateKey_1 = process.env.PRIVATE_KEY_1;
+const privateKey_2 = process.env.PRIVATE_KEY_2;
+const TOKEN_MINT_ADDRESS = new web3.PublicKey(process.env.TOKEN_TARGET);
 
-const USDC_MINT_ADDRESS = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
+const wallet_1 = web3.Keypair.fromSecretKey(new Uint8Array(bs58.decode(privateKey_1)));
+const wallet_2 = web3.Keypair.fromSecretKey(new Uint8Array(bs58.decode(privateKey_2)));
 
-async function transferUSDC(fromWallet, toWallet, amount) {
-    const fromTokenAccount = await getOrCreateAssociatedTokenAccount(
+async function getTokenBalance(wallet, mintAddress) {
+    const tokenAccount = await spltoken.getOrCreateAssociatedTokenAccount(
         connection,
-        fromWallet,
-        USDC_MINT_ADDRESS,
-        fromWallet.publicKey
+        wallet,
+        mintAddress,
+        wallet.publicKey
+    );
+    const balance = await connection.getTokenAccountBalance(tokenAccount.address);
+    return balance.value.uiAmount; // Returns the balance in human-readable format
+}
+
+async function transferUSDC(senderWallet, receiverWallet, amount) {
+    const senderTokenAccount = await spltoken.getOrCreateAssociatedTokenAccount(
+        connection,
+        senderWallet,
+        TOKEN_MINT_ADDRESS,
+        senderWallet.publicKey
     );
 
-    const toTokenAccount = await getOrCreateAssociatedTokenAccount(
+    const receiverTokenAccount = await spltoken.getOrCreateAssociatedTokenAccount(
         connection,
-        toWallet,
-        USDC_MINT_ADDRESS,
-        toWallet.publicKey
+        receiverWallet,
+        TOKEN_MINT_ADDRESS,
+        receiverWallet.publicKey
     );
 
-    const transferInstruction = createTransferInstruction(
-        fromTokenAccount.address,
-        toTokenAccount.address,
-        fromWallet.publicKey,
+    // Create transfer instruction
+    const transferInstruction = spltoken.createTransferInstruction(
+        senderTokenAccount.address,
+        receiverTokenAccount.address,
+        senderWallet.publicKey,
         amount * 10 ** 6
     );
 
-    const transaction = new Transaction().add(transferInstruction);
-    const signature = await connection.sendTransaction(transaction, [fromWallet]);
+    // Create and send transaction
+    const transaction = new web3.Transaction().add(transferInstruction);
+    const signature = await connection.sendTransaction(transaction, [senderWallet]);
 
-    await connection.confirmTransaction(signature);
+    const confirmation = await connection.confirmTransaction(signature);
+    if (confirmation.value.err) {
+        throw new Error(`Transaction failed: ${confirmation.value.err}`);
+    }
+
     console.log('Transfer successful:', signature);
 }
 
 async function main() {
-    const amount = 10; // Amount of USDC to transfer
+    try {
+        const amount = await getTokenBalance(wallet_1, TOKEN_MINT_ADDRESS);
+        console.log(`Balance in wallet_1: ${amount} USDC`);
 
-    // First transfer: Wallet A to Wallet B
-    await transferUSDC(senderWallet, receiverWallet, amount);
+        for (let i = 0; i < 2; i++) {
+            const o = i + 1;
 
-    // Wait for a specified time (e.g., 1 hour)
-    await new Promise(resolve => setTimeout(resolve, 3600000)); // 1 hour in milliseconds
+            // First transfer: Wallet A to Wallet B
+            await transferUSDC(wallet_1, wallet_2, amount);
 
-    // Second transfer: Wallet B to Wallet A
-    await transferUSDC(receiverWallet, senderWallet, amount);
+            // Wait for a specified time in milliseconds 
+            await new Promise(resolve => setTimeout(resolve, 60000)); // 
+
+            // Second transfer: Wallet B to Wallet A
+            await transferUSDC(wallet_2, wallet_1, amount);
+
+            // Wait for a specified time in milliseconds 
+            await new Promise(resolve => setTimeout(resolve, 60000)); // 
+
+            console.log(`${o} loops`);
+        }
+    } catch (error) {
+        console.error('Error in main function:', error);
+    }
 }
 
 main();
